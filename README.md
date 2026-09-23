@@ -42,4 +42,6 @@ Development and builds should not happen directly on a production Proxmox host. 
 
 ## License
 
-No license has been selected for this repository yet. Because this project may derive from or modify UrBackup code licensed under AGPL-3.0, licensing must be resolved before distributing derivative code.
+This project is licensed under the GNU Affero General Public License, version 3 or (at your option) any later version (AGPL-3.0-or-later).
+
+The project is intended to integrate with and may modify/derive from UrBackup client code, which is distributed under the same license. See [LICENSE](LICENSE).

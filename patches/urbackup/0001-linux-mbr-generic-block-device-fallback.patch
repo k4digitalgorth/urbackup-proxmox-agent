@@ -10,7 +10,9 @@
 diff --git a/urbackupclient/ClientService.cpp b/urbackupclient/ClientService.cpp
 --- a/urbackupclient/ClientService.cpp
 +++ b/urbackupclient/ClientService.cpp
-@@
+@@ -2338,7 +2338,18 @@ bool ClientConnector::sendMBR(std::string dl, std::string &errmsg)
+ 	} dev_num;
+ 
  	std::string dev_fn;
 -	parseDevicePartNumber(dl, dev_fn, dev_num.DeviceNumber, dev_num.PartitionNumber);
 +	if (!parseDevicePartNumber(dl, dev_fn, dev_num.DeviceNumber, dev_num.PartitionNumber))
@@ -26,3 +28,4 @@ diff --git a/urbackupclient/ClientService.cpp b/urbackupclient/ClientService.cpp
 +	}
  
  	IFile* dev = Server->openFile(dev_fn, MODE_READ_DEVICE);
+ 	if (dev == nullptr)

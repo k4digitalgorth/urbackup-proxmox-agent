@@ -152,6 +152,16 @@ def atomic_write_json(path: Path, data: dict) -> None:
     os.replace(tmp, path)
 
 
+def write_snapshot_device_file(snapshot_path: str) -> str:
+    dev_file = snapshot_path + "-dev"
+    with open(dev_file, "w", encoding="utf-8") as f:
+        f.write(snapshot_path + "\n")
+        f.flush()
+        os.fsync(f.fileno())
+    os.chmod(dev_file, 0o600)
+    return dev_file
+
+
 def cleanup_state(state: dict, remove_state_file: bool = True) -> None:
     vmid = int(state["vmid"])
     snap = state["snapshot_name"]
@@ -161,6 +171,13 @@ def cleanup_state(state: dict, remove_state_file: bool = True) -> None:
             restore_snapdev(item["dataset"], item["snapdev_value"], item["snapdev_source"])
         except Exception as exc:
             errors.append(f"restore snapdev {item['dataset']}: {exc}")
+    dev_file = state.get("snapshot_device_file")
+    if dev_file:
+        try:
+            Path(dev_file).unlink(missing_ok=True)
+        except Exception as exc:
+            errors.append(f"remove snapshot device file: {exc}")
+
     deletion = run(["qm", "delsnapshot", str(vmid), snap], check=False)
     if deletion.returncode != 0:
         combined = (deletion.stderr or deletion.stdout).strip()
@@ -188,6 +205,9 @@ def create(snapshot_id: str, requested_path: str) -> int:
                 raise RuntimeError("Snapshot id is already associated with a different VM")
             target = f"{canonical_path}@{existing['snapshot_name']}"
             wait_for_path(target)
+            dev_file = target + "-dev"
+            if not os.path.exists(dev_file):
+                write_snapshot_device_file(target)
             print(f"SNAPSHOT={target}")
             return 0
 
@@ -222,6 +242,7 @@ def create(snapshot_id: str, requested_path: str) -> int:
 
             target = f"{canonical_path}@{snap}"
             wait_for_path(target)
+            state["snapshot_device_file"] = write_snapshot_device_file(target)
             atomic_write_json(spath, state)
             print(f"SNAPSHOT={target}")
             print(f"Proxmox VM {vmid} snapshot {snap} created for UrBackup", file=sys.stderr)

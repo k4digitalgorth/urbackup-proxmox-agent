@@ -10,7 +10,7 @@
 diff --git a/urbackupclient/ClientService.cpp b/urbackupclient/ClientService.cpp
 --- a/urbackupclient/ClientService.cpp
 +++ b/urbackupclient/ClientService.cpp
-@@ -2338,7 +2338,18 @@ bool ClientConnector::sendMBR(std::string dl, std::string &errmsg)
+@@ -2577,7 +2577,17 @@ bool ClientConnector::sendMBR(std::string dl, std::string &errmsg)
  	} dev_num;
  
  	std::string dev_fn;

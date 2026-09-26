@@ -1,0 +1,104 @@
+#!/usr/bin/env python3
+import argparse
+import datetime as dt
+import json
+import subprocess
+import sys
+from typing import List
+
+
+def run(cmd: List[str], check=True) -> subprocess.CompletedProcess:
+    p = subprocess.run(cmd, text=True, capture_output=True)
+    if check and p.returncode != 0:
+        raise RuntimeError(
+            f"Command failed ({p.returncode}): {' '.join(cmd)}\n"
+            f"stdout: {p.stdout.strip()}\n"
+            f"stderr: {p.stderr.strip()}"
+        )
+    return p
+
+
+def main():
+    ap = argparse.ArgumentParser(
+        description="Proxmox VM snapshot lifecycle probe. Dry-run by default."
+    )
+    ap.add_argument("vmid", type=int)
+    ap.add_argument(
+        "--execute",
+        action="store_true",
+        help="Actually create and then delete the Proxmox VM snapshot",
+    )
+    ap.add_argument(
+        "--keep-snapshot",
+        action="store_true",
+        help="Keep the created snapshot instead of deleting it (requires --execute)",
+    )
+    args = ap.parse_args()
+
+    if args.keep_snapshot and not args.execute:
+        ap.error("--keep-snapshot requires --execute")
+
+    stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d%H%M%S")
+    snapname = f"urbackup_probe_{stamp}"
+
+    status = run(["qm", "status", str(args.vmid)]).stdout.strip()
+    config = run(["qm", "config", str(args.vmid)]).stdout
+    agent_enabled = any(
+        line.strip().startswith("agent:") and line.split(":", 1)[1].strip().split(",", 1)[0] not in ("0", "")
+        for line in config.splitlines()
+    )
+
+    plan = {
+        "vmid": args.vmid,
+        "status": status,
+        "guest_agent_configured": agent_enabled,
+        "snapshot_name": snapname,
+        "create_command": ["qm", "snapshot", str(args.vmid), snapname, "--description", "urbackup-proxmox-agent lifecycle probe"],
+        "delete_command": ["qm", "delsnapshot", str(args.vmid), snapname],
+        "execute": args.execute,
+        "keep_snapshot": args.keep_snapshot,
+    }
+
+    print(json.dumps(plan, indent=2))
+
+    if not args.execute:
+        print("\nDRY RUN ONLY. No snapshot was created.", file=sys.stderr)
+        return 0
+
+    created = False
+    try:
+        print("\nCreating snapshot...", file=sys.stderr)
+        create = run(plan["create_command"])
+        created = True
+        if create.stdout.strip():
+            print(create.stdout, file=sys.stderr, end="")
+
+        print("\nqm listsnapshot output:", file=sys.stderr)
+        print(run(["qm", "listsnapshot", str(args.vmid)]).stdout, file=sys.stderr, end="")
+
+        print("\nMatching ZFS snapshots:", file=sys.stderr)
+        zfs = run(["zfs", "list", "-t", "snapshot", "-o", "name", "-H"], check=False)
+        matches = [line for line in zfs.stdout.splitlines() if f"vm-{args.vmid}-disk-" in line]
+        if matches:
+            print("\n".join(matches), file=sys.stderr)
+        else:
+            print("(none found by simple name filter)", file=sys.stderr)
+
+        return 0
+    finally:
+        if created and not args.keep_snapshot:
+            print("\nDeleting probe snapshot...", file=sys.stderr)
+            delete = run(plan["delete_command"], check=False)
+            if delete.returncode != 0:
+                print(
+                    "WARNING: automatic snapshot cleanup failed. "
+                    f"Run manually: qm delsnapshot {args.vmid} {snapname}",
+                    file=sys.stderr,
+                )
+                print(delete.stderr, file=sys.stderr)
+            else:
+                print("Snapshot cleanup completed.", file=sys.stderr)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

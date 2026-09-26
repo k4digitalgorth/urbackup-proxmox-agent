@@ -52,3 +52,53 @@ The first end-to-end UrBackup test should use **only the primary VM disk (`scsi0
 Proxmox still snapshots scsi0, EFI and TPM together, preserving a consistent VM state. However, UrBackup's multi-image scheduling/grouping semantics still need validation before we expose EFI and TPM as separate UrBackup image jobs sharing a single lifecycle.
 
 Do not yet use this integration for production backups.
+
+
+## Validated end-to-end full image backup
+
+A real full-image backup of Proxmox VM 150 was completed successfully against UrBackup Server 2.5.37 with UrBackup Client 2.5.31.
+
+Validated flow:
+
+1. UrBackup Server starts a full image job for the configured source.
+2. The Linux client successfully retrieves MBR/GPT metadata.
+3. UrBackup invokes the external `create_volume_snapshot` hook.
+4. The hook creates a Proxmox-managed snapshot of VM 150.
+5. The snapshot contains the VM payload devices atomically (primary disk, EFI disk and TPM state).
+6. The requested primary disk snapshot is exposed as a readable ZVOL snapshot block device.
+7. The hook creates UrBackup's required `<SNAPSHOT>-dev` metadata file containing the real snapshot block-device path.
+8. UrBackup reads the full disk image from the ZVOL snapshot and completes the image backup.
+9. UrBackup invokes `remove_volume_snapshot`.
+10. The hook removes the `-dev` metadata file, restores the original ZFS `snapdev` property semantics, deletes the Proxmox snapshot and removes its runtime state.
+
+Post-backup validation confirmed:
+
+- `qm listsnapshot 150` showed no remaining `urbackup_*` snapshot.
+- `/run/urbackup-proxmox-agent` contained no per-job JSON state file.
+- no `vm-150-disk-1@urbackup_*-dev` metadata file remained.
+
+## Linux device-name compatibility workaround
+
+UrBackup's Linux MBR handling parses only a limited set of device-name families. A Proxmox ZVOL such as:
+
+```text
+/dev/zvol/rpool/data/vm-150-disk-1
+```
+
+resolves to a `/dev/zd*` device, which is not handled by UrBackup's current device parser.
+
+For the validated V1 test, a stable alias was therefore used:
+
+```text
+/dev/loop624 -> /dev/zvol/rpool/data/vm-150-disk-1
+```
+
+UrBackup Server is configured with `image_letters=/dev/loop624`. The Proxmox hook accepts this direct symlink, resolves it back to the canonical `/dev/zvol/...` path for snapshot operations, and returns the real ZVOL snapshot path to UrBackup.
+
+This alias is currently a compatibility workaround, not the intended long-term configuration mechanism. A production-ready version should manage stable aliases explicitly rather than relying on a manually created `/dev/loop*` symlink.
+
+## Filesystem detection behavior
+
+When backing up the complete VM disk, UrBackup detects the outer disk structure as GPT rather than a directly supported filesystem. It therefore falls back to its unknown-filesystem behavior and treats the complete disk range as used.
+
+This is acceptable for the current V1 validation because UrBackup still uses its image-transfer and block-hash mechanisms, but it means the client scans the full virtual disk address space.

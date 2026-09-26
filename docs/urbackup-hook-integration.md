@@ -102,3 +102,19 @@ This alias is currently a compatibility workaround, not the intended long-term c
 When backing up the complete VM disk, UrBackup detects the outer disk structure as GPT rather than a directly supported filesystem. It therefore falls back to its unknown-filesystem behavior and treats the complete disk range as used.
 
 This is acceptable for the current V1 validation because UrBackup still uses its image-transfer and block-hash mechanisms, but it means the client scans the full virtual disk address space.
+
+
+## Validated incremental image backup
+
+A real incremental image backup was completed successfully after the validated full image backup.
+
+Validated behavior:
+
+- UrBackup Client reported the running action as `INCRI`.
+- The incremental job completed with `success: true`.
+- The Proxmox snapshot lifecycle was exercised again for the incremental run.
+- After completion, `qm listsnapshot 150` showed only `current`; no `urbackup_*` snapshot remained.
+- `/run/urbackup-proxmox-agent` contained no per-job JSON state file.
+- no `vm-150-disk-1@urbackup_*-dev` metadata file remained.
+
+This confirms the V1 integration works end-to-end for both UrBackup full image (`FULLI`) and incremental image (`INCRI`) backups of the VM's primary ZVOL-backed disk.

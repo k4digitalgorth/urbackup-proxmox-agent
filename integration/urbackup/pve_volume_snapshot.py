@@ -72,14 +72,24 @@ def vm_lock(vmid: int):
     return handle
 
 
-def parse_zvol_vm(path: str) -> Tuple[int, str]:
-    match = ZVOL_VM_RE.match(path)
+def parse_zvol_vm(path: str) -> Tuple[int, str, str]:
+    canonical_path = path
+
+    if not canonical_path.startswith(ZVOL_PREFIX) and os.path.islink(canonical_path):
+        link_target = os.readlink(canonical_path)
+        if not os.path.isabs(link_target):
+            link_target = os.path.normpath(
+                os.path.join(os.path.dirname(canonical_path), link_target)
+            )
+        canonical_path = link_target
+
+    match = ZVOL_VM_RE.match(canonical_path)
     if not match:
         raise ValueError(
             "Proxmox UrBackup hook only accepts VM ZVOL devices matching "
-            "/dev/zvol/.../vm-<vmid>-disk-<n>"
+            "/dev/zvol/.../vm-<vmid>-disk-<n> or a direct symlink to one"
         )
-    return int(match.group("vmid")), match.group("dataset")
+    return int(match.group("vmid")), match.group("dataset"), canonical_path
 
 
 def get_snapdev(dataset: str) -> Tuple[str, str]:
@@ -167,7 +177,7 @@ def cleanup_state(state: dict, remove_state_file: bool = True) -> None:
 
 def create(snapshot_id: str, requested_path: str) -> int:
     ensure_dirs()
-    vmid, requested_dataset = parse_zvol_vm(requested_path)
+    vmid, requested_dataset, canonical_path = parse_zvol_vm(requested_path)
     lock = vm_lock(vmid)
     try:
         spath = state_path(snapshot_id)
@@ -176,7 +186,7 @@ def create(snapshot_id: str, requested_path: str) -> int:
                 existing = json.load(f)
             if int(existing.get("vmid", -1)) != vmid:
                 raise RuntimeError("Snapshot id is already associated with a different VM")
-            target = f"{requested_path}@{existing['snapshot_name']}"
+            target = f"{canonical_path}@{existing['snapshot_name']}"
             wait_for_path(target)
             print(f"SNAPSHOT={target}")
             return 0
@@ -192,6 +202,7 @@ def create(snapshot_id: str, requested_path: str) -> int:
             "snapshot_name": snap,
             "vmid": vmid,
             "requested_path": requested_path,
+            "canonical_path": canonical_path,
             "devices": [],
         }
         created = False
@@ -209,7 +220,7 @@ def create(snapshot_id: str, requested_path: str) -> int:
             for item in state["devices"]:
                 run(["zfs", "set", "snapdev=visible", item["dataset"]])
 
-            target = f"{requested_path}@{snap}"
+            target = f"{canonical_path}@{snap}"
             wait_for_path(target)
             atomic_write_json(spath, state)
             print(f"SNAPSHOT={target}")

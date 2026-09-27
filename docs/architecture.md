@@ -24,7 +24,7 @@ Proxmox integration layer
       +-- restore orchestration
       |
       v
-Proxmox/QEMU/ZFS
+Proxmox/QEMU/storage backend
 ```
 
 ## V1 data model
@@ -66,8 +66,8 @@ V1 must not call `zfs snapshot` blindly behind Proxmox's back.
 Preferred order:
 
 1. Ask Proxmox/QEMU to create or coordinate a consistent VM snapshot state.
-2. Resolve the backing ZFS volumes belonging to that VM state.
-3. Expose those volumes read-only to the UrBackup image reader.
+2. Resolve the backing volumes belonging to that VM state through a storage-backend adapter.
+3. Expose the snapshot-backed volumes read-only to the UrBackup image reader.
 4. Release the snapshot state only after the backup has completed or failed cleanly.
 
 The exact Proxmox 9.2 mechanism will be selected after probing the test VM.
@@ -95,3 +95,13 @@ The restore workflow will eventually:
 7. validate the VM before start.
 
 V1 implementation work begins with backup first, but restore metadata requirements are designed in from the beginning.
+
+## Storage backend contract
+
+The Proxmox integration must use Proxmox-managed snapshots as the consistency boundary. Storage backends are supported only when Proxmox itself can create a snapshot for the VM disk.
+
+Backend-specific code is responsible for resolving the readable snapshot block source after Proxmox created the VM snapshot. It must not silently fall back to creating out-of-band storage snapshots behind Proxmox.
+
+### Classic LVM on Proxmox VE 9
+
+Classic LVM can participate only when the storage has `snapshot-as-volume-chain 1` enabled and the affected VM disk was created after that setting was enabled. Existing disks created before enabling the option remain non-snapshot-capable and are rejected by the backup workflow until recreated or migrated.

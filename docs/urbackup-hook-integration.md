@@ -118,3 +118,28 @@ Validated behavior:
 - no `vm-150-disk-1@urbackup_*-dev` metadata file remained.
 
 This confirms the V1 integration works end-to-end for both UrBackup full image (`FULLI`) and incremental image (`INCRI`) backups of the VM's primary ZVOL-backed disk.
+
+
+## Runtime dependency for the patched UrBackup client
+
+The patched UrBackup Linux client binary built for the current Debian/Proxmox test environment requires the Crypto++ runtime library.
+
+On Debian 13 / current Proxmox VE test hosts install:
+
+```bash
+apt install -y libcrypto++8t64
+```
+
+Without this package, `ldd` reports:
+
+```text
+libcrypto++.so.8 => not found
+```
+
+Verify the deployed binary before starting the service:
+
+```bash
+ldd /usr/local/sbin/urbackupclientbackend | grep 'not found'
+```
+
+The command should produce no output.

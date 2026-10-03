@@ -21,6 +21,19 @@ from discover_vm_backup_set import discover
 
 
 ROLE_ORDER = {"disk": 0, "efi": 1, "tpm": 2}
+TRANSIENT_VM_CONFIG_KEYS = {"parent", "lock"}
+
+
+def sanitize_vm_config(config_text: str) -> str:
+    """Remove transient Proxmox runtime/snapshot fields from restore metadata."""
+    lines = []
+    for line in config_text.splitlines():
+        if ":" in line:
+            key = line.split(":", 1)[0].strip()
+            if key in TRANSIENT_VM_CONFIG_KEYS:
+                continue
+        lines.append(line)
+    return "\n".join(lines) + ("\n" if config_text.endswith("\n") else "")
 
 
 def build_plan(vmid: int) -> dict:
@@ -51,7 +64,7 @@ def build_plan(vmid: int) -> dict:
         "storage_scope": discovered["storage_scope"],
         "supported_v1": discovered["supported_v1"],
         "metadata": {
-            "vm_config": discovered["vm_config"],
+            "vm_config": sanitize_vm_config(discovered["vm_config"]),
         },
         "image_jobs": image_jobs,
         "skipped": discovered["skipped"],

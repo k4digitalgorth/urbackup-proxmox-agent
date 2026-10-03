@@ -116,7 +116,7 @@ def get_vm_zvols(vmid: int) -> List[Dict[str, str]]:
         value = value.strip()
         if "media=cdrom" in value:
             continue
-        if not re.match(r"^(?:scsi|sata|virtio|ide)\\d+$|^(?:efidisk|tpmstate)\\d+$", key):
+        if not re.match(r"^(?:scsi|sata|virtio|ide)[0-9]+$|^(?:efidisk|tpmstate)[0-9]+$", key):
             continue
         storage_ref = value.split(",", 1)[0]
         p = run(["pvesm", "path", storage_ref], check=False)

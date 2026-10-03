@@ -10,12 +10,13 @@
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from typing import Dict, List
 
 
-PAYLOAD_PREFIXES = ("scsi", "sata", "virtio", "ide", "efidisk", "tpmstate")
+PAYLOAD_KEY_RE = re.compile(r"^(?:scsi|sata|virtio|ide)\\d+$|^(?:efidisk|tpmstate)\\d+$")
 ZVOL_PREFIX = "/dev/zvol/"
 
 
@@ -51,7 +52,7 @@ def discover(vmid: int) -> Dict[str, object]:
         key = key.strip()
         value = raw_value.strip()
 
-        if not key.startswith(PAYLOAD_PREFIXES):
+        if not PAYLOAD_KEY_RE.match(key):
             continue
 
         if "media=cdrom" in value:

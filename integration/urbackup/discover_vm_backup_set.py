@@ -16,7 +16,7 @@ import sys
 from typing import Dict, List
 
 
-PAYLOAD_KEY_RE = re.compile(r"^(?:scsi|sata|virtio|ide)\\d+$|^(?:efidisk|tpmstate)\\d+$")
+PAYLOAD_KEY_RE = re.compile(r"^(?:scsi|sata|virtio|ide)[0-9]+$|^(?:efidisk|tpmstate)[0-9]+$")
 ZVOL_PREFIX = "/dev/zvol/"
 
 

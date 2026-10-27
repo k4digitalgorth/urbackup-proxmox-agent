@@ -40,7 +40,7 @@ def build_plan(vmid: int) -> dict:
     discovered = discover(vmid)
 
     image_jobs = []
-    for device in discovered["devices"]:
+    for device in (discovered["devices"] if discovered["supported_v1"] else []):
         if not device.get("supported_v1"):
             continue
         image_jobs.append({
